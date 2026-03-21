@@ -1,0 +1,22 @@
+[
+    {
+        "name": "物流問い合わせナレッジ支援",
+        "app_type": "rag_chat",
+        "summary": "社内マニュアル検索と回答候補提示を組み合わせた PoC"
+    },
+    {
+        "name": "申請内容の一次判定支援",
+        "app_type": "form_judgement",
+        "summary": "フォーム入力とルール判定で確認工数を減らす PoC"
+    },
+    {
+        "name": "社内ヘルプデスク FAQ 検索",
+        "app_type": "faq_search",
+        "summary": "FAQ 参照と問い合わせ導線の整理を行う PoC"
+    },
+    {
+        "name": "営業ロールプレイ訓練支援",
+        "app_type": "interactive_roleplay",
+        "summary": "顧客役シナリオと会話後フィードバックで訓練効率を高める PoC"
+    }
+]

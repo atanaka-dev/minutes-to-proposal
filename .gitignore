@@ -1,0 +1,41 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg-info/
+*.egg
+dist/
+build/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Environment variables / Secrets
+.env
+.env.*
+!.env.example
+secrets/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Project specific
+artifacts/
+logs/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# Streamlit
+.streamlit/secrets.toml

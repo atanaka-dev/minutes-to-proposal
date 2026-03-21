@@ -1,0 +1,13 @@
+{
+    "roles": {
+        "pm": {
+            "daily_rate_jpy": 120000
+        },
+        "ai_engineer": {
+            "daily_rate_jpy": 150000
+        },
+        "app_engineer": {
+            "daily_rate_jpy": 110000
+        }
+    }
+}

@@ -1,0 +1,903 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>商談即提案 - デモスライド</title>
+    <style>
+        :root {
+            --bg: #f7f7f8;
+            --bg-soft: #fbfbfc;
+            --panel: #ffffff;
+            --border: rgba(0, 0, 0, 0.06);
+            --border-strong: rgba(0, 0, 0, 0.10);
+            --text: #1e293b;
+            --text-soft: #475569;
+            --muted: #94a3b8;
+            --accent: #CC1B2E;
+            --accent-strong: #e8384f;
+            --accent-soft: rgba(204, 27, 46, 0.05);
+            --accent-soft-2: rgba(204, 27, 46, 0.08);
+            --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.04), 0 1px 2px rgba(0, 0, 0, 0.03);
+            --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -2px rgba(0, 0, 0, 0.04);
+            --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.06), 0 4px 6px -4px rgba(0, 0, 0, 0.04);
+            --radius-xl: 20px;
+            --radius-lg: 14px;
+            --radius-md: 10px;
+            --dark-bg: #0f172a;
+            --dark-surface: rgba(255, 255, 255, 0.06);
+            --dark-border: rgba(255, 255, 255, 0.08);
+            --dark-text: #f1f5f9;
+            --dark-text-soft: #94a3b8;
+            --content-width: min(1400px, calc(100vw - 120px));
+        }
+
+        * { box-sizing: border-box; }
+        html { scroll-behavior: smooth; }
+
+        body {
+            margin: 0;
+            font-family: "Helvetica Neue", Arial, "Hiragino Kaku Gothic ProN", "Hiragino Sans", Meiryo, sans-serif;
+            color: var(--text);
+            background: var(--bg);
+            line-height: 1.7;
+            overflow: hidden;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        h1, h2, h3, p, ul { margin: 0; }
+
+        /* ── Deck infrastructure ── */
+        .deck {
+            position: relative;
+            height: 100vh;
+            width: 100vw;
+        }
+
+        .slides {
+            height: 100%;
+            overflow: auto;
+            scroll-snap-type: y mandatory;
+        }
+
+        .slides::-webkit-scrollbar { display: none; }
+        .slides { scrollbar-width: none; }
+
+        .slide {
+            min-height: 100vh;
+            scroll-snap-align: start;
+            padding: 48px 60px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+            background: var(--bg);
+        }
+
+        .slide::before {
+            content: "";
+            position: absolute;
+            inset: 24px;
+            border: 1px solid rgba(0, 0, 0, 0.03);
+            border-radius: 24px;
+            pointer-events: none;
+        }
+
+        .slide-inner {
+            width: var(--content-width);
+            display: grid;
+            gap: 28px;
+            position: relative;
+            z-index: 1;
+        }
+
+        /* ── Dark slide variant ── */
+        .slide--dark {
+            background: var(--dark-bg);
+        }
+
+        .slide--dark::before {
+            border-color: rgba(255, 255, 255, 0.04);
+        }
+
+        .slide--dark .tag {
+            background: rgba(204, 27, 46, 0.15);
+            border-color: rgba(204, 27, 46, 0.25);
+        }
+
+        /* ── Tags ── */
+        .tag {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 8px 18px;
+            border-radius: 999px;
+            background: var(--accent-soft);
+            border: 1px solid var(--accent-soft-2);
+            color: var(--accent);
+            font-size: clamp(0.85rem, 1.1vw, 1.05rem);
+            font-weight: 700;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+            width: fit-content;
+        }
+
+        /* ── Progress bar ── */
+        .progress {
+            position: fixed;
+            left: 0; top: 0;
+            width: 100%; height: 3px;
+            background: rgba(0, 0, 0, 0.04);
+            z-index: 11;
+        }
+
+        .progress-bar {
+            width: 0; height: 100%;
+            background: var(--accent);
+            transition: width 180ms ease;
+        }
+
+        /* ── Left rail dots ── */
+        .left-rail {
+            position: fixed;
+            left: 20px; top: 50%;
+            transform: translateY(-50%);
+            z-index: 10;
+            display: grid;
+            gap: 12px;
+        }
+
+        .dot {
+            width: 9px; height: 9px;
+            border-radius: 999px;
+            border: none;
+            background: rgba(0, 0, 0, 0.12);
+            cursor: pointer;
+            padding: 0;
+            transition: transform 160ms ease, background 160ms ease;
+        }
+
+        .dot.active {
+            background: var(--accent);
+            transform: scale(1.5);
+        }
+
+        /* ── Floating nav (hidden for video capture, JS still works) ── */
+        .floating-ui {
+            display: none;
+        }
+
+        .nav-btn, .mode-btn {
+            border: 1px solid var(--border-strong);
+            background: var(--panel);
+            color: var(--text);
+            border-radius: 999px;
+            width: 44px; height: 44px;
+            font-size: 1rem;
+            cursor: pointer;
+            box-shadow: var(--shadow);
+            transition: transform 120ms ease, box-shadow 120ms ease;
+        }
+
+        .mode-btn {
+            width: auto;
+            padding: 0 16px;
+            font-size: 0.88rem;
+        }
+
+        .nav-btn:hover, .mode-btn:hover {
+            transform: translateY(-1px);
+            box-shadow: var(--shadow-lg);
+            background: var(--bg-soft);
+        }
+
+        /* help-text removed for video capture */
+
+        .page-indicator {
+            position: fixed;
+            right: 128px; bottom: 84px;
+            min-width: 48px;
+            text-align: right;
+            font-size: 0.95rem;
+            letter-spacing: 0.16em;
+            color: var(--muted);
+            z-index: 12;
+            pointer-events: none;
+        }
+
+        /* ── Continuous mode ── */
+        .continuous .slides { scroll-snap-type: none; }
+        .continuous .slide { min-height: auto; padding-top: 80px; padding-bottom: 0; }
+        .continuous .slide::before { inset: 24px 24px 0; border-radius: 24px 24px 0 0; }
+        .continuous .slide:last-child { padding-bottom: 40px; }
+
+        /* ================================================================
+           SLIDE 1 — Title
+           ================================================================ */
+        .title-content {
+            display: grid;
+            gap: 24px;
+            justify-items: start;
+        }
+
+        .title-main {
+            font-size: clamp(3.2rem, 6.5vw, 6rem);
+            line-height: 1.05;
+            letter-spacing: -0.03em;
+            font-weight: 900;
+            color: var(--dark-text);
+            padding-left: 24px;
+            border-left: 8px solid var(--accent);
+        }
+
+        .title-sub {
+            font-size: clamp(1.3rem, 2.2vw, 2rem);
+            line-height: 1.5;
+            color: var(--dark-text-soft);
+            font-weight: 400;
+            max-width: 900px;
+        }
+
+        .title-accent {
+            display: inline-block;
+            width: 64px;
+            height: 4px;
+            background: var(--accent);
+            border-radius: 2px;
+            margin-top: 8px;
+        }
+
+        /* ================================================================
+           SLIDE 2 — Challenge
+           ================================================================ */
+        .challenge-layout {
+            display: grid;
+            grid-template-columns: 1fr 2.2fr;
+            gap: 32px;
+            align-items: stretch;
+        }
+
+        .profile-card {
+            background: var(--panel);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-xl);
+            box-shadow: var(--shadow-sm);
+            padding: 32px 28px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 20px;
+            text-align: center;
+        }
+
+        .avatar {
+            width: 140px; height: 140px;
+            border-radius: var(--radius-lg);
+            object-fit: cover;
+            flex-shrink: 0;
+            border: 3px solid var(--border-strong);
+        }
+
+        .profile-name {
+            font-size: clamp(1.3rem, 1.8vw, 1.7rem);
+            font-weight: 700;
+            color: var(--text);
+        }
+
+        .profile-items {
+            display: grid;
+            gap: 12px;
+            width: 100%;
+        }
+
+        .profile-item {
+            padding: 12px 16px;
+            border-radius: var(--radius-md);
+            background: var(--bg-soft);
+            border: 1px solid var(--border);
+            text-align: left;
+        }
+
+        .profile-label {
+            display: block;
+            font-size: clamp(0.72rem, 0.9vw, 0.85rem);
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+            color: var(--muted);
+            margin-bottom: 4px;
+            font-weight: 600;
+        }
+
+        .profile-value {
+            font-size: clamp(0.95rem, 1.15vw, 1.1rem);
+            color: var(--text);
+            font-weight: 600;
+        }
+
+        .blocks-grid {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 12px;
+        }
+
+        .info-block {
+            background: var(--panel);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-lg);
+            box-shadow: var(--shadow-sm);
+            padding: 18px 24px;
+            display: flex;
+            align-items: center;
+            gap: 40px;
+        }
+
+        .block-label {
+            display: none;
+        }
+
+        .block-title {
+            font-size: clamp(1.3rem, 1.8vw, 1.65rem);
+            font-weight: 700;
+            color: var(--text);
+            flex-shrink: 0;
+            min-width: 4.5em;
+            padding-left: 14px;
+            border-left: 3px solid var(--accent);
+        }
+
+        .block-body {
+            font-size: clamp(1.15rem, 1.6vw, 1.45rem);
+            color: var(--text-soft);
+            line-height: 1.6;
+        }
+
+        .info-block--accent {
+            background: var(--accent);
+            border-color: var(--accent);
+        }
+
+        .info-block--accent .block-title { color: #fff; border-left-color: rgba(255,255,255,0.4); }
+        .info-block--accent .block-body { color: rgba(255,255,255,0.92); }
+
+        /* ================================================================
+           SLIDE 3 — System Architecture
+           ================================================================ */
+        .flow {
+            display: grid;
+            grid-template-columns: 1.1fr auto 1.3fr auto 1.1fr;
+            align-items: stretch;
+            gap: 0;
+        }
+
+        .flow-box {
+            background: var(--panel);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-xl);
+            box-shadow: var(--shadow-sm);
+            padding: 28px 24px;
+            display: grid;
+            gap: 12px;
+            align-content: center;
+        }
+
+        .flow-box--process {
+            border: 2px solid var(--accent);
+            background: linear-gradient(135deg, var(--panel), var(--accent-soft));
+        }
+
+        .flow-box-title {
+            font-size: clamp(0.82rem, 1vw, 0.95rem);
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+            color: var(--muted);
+            font-weight: 700;
+        }
+
+        .flow-box--process .flow-box-title {
+            color: var(--accent);
+        }
+
+        .flow-item {
+            font-size: clamp(1.05rem, 1.3vw, 1.25rem);
+            color: var(--text);
+            font-weight: 600;
+            padding: 10px 16px;
+            background: var(--bg-soft);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-md);
+        }
+
+        .flow-box--process .flow-item {
+            background: rgba(204, 27, 46, 0.04);
+            border-color: rgba(204, 27, 46, 0.12);
+        }
+
+        .flow-step-num {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 24px; height: 24px;
+            border-radius: 50%;
+            background: var(--accent);
+            color: #fff;
+            font-size: 0.72rem;
+            font-weight: 700;
+            margin-right: 10px;
+            flex-shrink: 0;
+        }
+
+        .flow-item--step {
+            display: flex;
+            align-items: center;
+        }
+
+        .flow-output-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .flow-check {
+            color: var(--accent);
+            font-weight: 700;
+            font-size: 1.1em;
+            flex-shrink: 0;
+        }
+
+        .flow-connector {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0 8px;
+        }
+
+        .flow-arrow {
+            display: flex;
+            align-items: center;
+            gap: 0;
+        }
+
+        .flow-arrow-line {
+            width: 32px;
+            height: 3px;
+            background: var(--accent);
+        }
+
+        .flow-arrow-head {
+            width: 0; height: 0;
+            border-top: 9px solid transparent;
+            border-bottom: 9px solid transparent;
+            border-left: 14px solid var(--accent);
+        }
+
+        /* ================================================================
+           SLIDE 4 — Differentiation
+           ================================================================ */
+        .diff-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 24px;
+        }
+
+        .diff-card {
+            background: var(--panel);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-xl);
+            box-shadow: var(--shadow-sm);
+            padding: 36px 28px;
+            display: grid;
+            gap: 18px;
+            grid-template-rows: min-content min-content 1fr;
+            transition: transform 200ms ease, box-shadow 200ms ease;
+        }
+
+        .diff-card:hover {
+            transform: translateY(-2px);
+            box-shadow: var(--shadow-lg);
+        }
+
+        .diff-num {
+            font-size: clamp(2.4rem, 3.5vw, 3.2rem);
+            font-weight: 900;
+            color: var(--accent);
+            line-height: 1;
+            letter-spacing: -0.03em;
+        }
+
+        .diff-title {
+            font-size: clamp(1.3rem, 1.8vw, 1.7rem);
+            font-weight: 700;
+            color: var(--text);
+            padding-bottom: 14px;
+            border-bottom: 1px solid var(--border-strong);
+        }
+
+        .diff-desc {
+            font-size: clamp(1.05rem, 1.3vw, 1.2rem);
+            color: var(--text-soft);
+            line-height: 1.9;
+        }
+
+        .diff-desc strong {
+            color: var(--text);
+            font-weight: 700;
+        }
+
+        /* ================================================================
+           SLIDE 5 — Closing
+           ================================================================ */
+        .slide--closing {
+            background:
+                linear-gradient(160deg, rgba(15, 23, 42, 0.88), rgba(15, 23, 42, 0.75)),
+                /* ↓ システム画面キャプチャに差し替え */
+                linear-gradient(135deg, #1e293b 0%, #334155 50%, #1e293b 100%);
+            background-size: cover;
+            background-position: center;
+        }
+
+        .closing-content {
+            display: grid;
+            gap: 28px;
+            justify-items: center;
+            text-align: center;
+        }
+
+        .closing-title {
+            font-size: clamp(3.6rem, 7vw, 6.5rem);
+            font-weight: 900;
+            color: var(--dark-text);
+            letter-spacing: -0.03em;
+            line-height: 1.05;
+        }
+
+        .closing-sub {
+            font-size: clamp(1.2rem, 2vw, 1.8rem);
+            color: var(--dark-text-soft);
+            max-width: 800px;
+        }
+
+        .closing-bar {
+            width: 80px;
+            height: 4px;
+            background: var(--accent);
+            border-radius: 2px;
+        }
+
+        .closing-cta {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 14px 32px;
+            border-radius: 999px;
+            background: var(--accent);
+            color: #fff;
+            font-size: clamp(1rem, 1.4vw, 1.3rem);
+            font-weight: 700;
+            letter-spacing: 0.04em;
+            border: none;
+            margin-top: 8px;
+        }
+
+        /* ── Section header ── */
+        .section-header {
+            display: grid;
+            gap: 10px;
+        }
+
+        .section-title {
+            font-size: clamp(2.2rem, 3.5vw, 3.2rem);
+            line-height: 1.12;
+            letter-spacing: -0.02em;
+            font-weight: 800;
+            color: var(--text);
+        }
+
+        .section-lead {
+            font-size: clamp(1.05rem, 1.4vw, 1.3rem);
+            color: var(--text-soft);
+        }
+
+        /* ── Responsive ── */
+        @media (max-width: 1024px) {
+            body { overflow: auto; }
+            .slide { padding: 28px 22px; }
+            .slide::before { inset: 12px; }
+            .challenge-layout { grid-template-columns: 1fr; }
+            .info-block { flex-direction: column; align-items: flex-start; gap: 8px; }
+            .block-title { min-width: auto; }
+            .flow { grid-template-columns: 1fr; }
+            .flow-connector { transform: rotate(90deg); padding: 12px 0; }
+            .diff-grid { grid-template-columns: 1fr; }
+            .left-rail { display: none; }
+            .floating-ui { right: 12px; bottom: 12px; }
+        }
+
+        @media print {
+            body { overflow: visible; background: white; }
+            .slides { overflow: visible; }
+            .slide { min-height: auto; page-break-after: always; padding: 24px; }
+            .slide::before, .floating-ui, .left-rail, .progress { display: none; }
+        }
+    </style>
+</head>
+<body>
+    <div class="progress"><div class="progress-bar" id="progressBar"></div></div>
+
+    <div class="deck" id="deckRoot">
+        <aside class="left-rail" id="leftRail"></aside>
+
+        <div class="slides" id="slides">
+
+            <!-- ============================================================
+                 SLIDE 1 — Title
+                 ============================================================ -->
+            <section class="slide slide--dark" data-title="タイトル">
+                <div class="slide-inner">
+                    <div class="title-content">
+                        <span class="tag">AIエージェントハッカソン2026</span>
+                        <h1 class="title-main">商談即提案</h1>
+                        <p class="title-sub">議事録から 提案 / 見積 / PoC計画まで<br>自走するAIエージェント</p>
+                        <span class="title-accent"></span>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ============================================================
+                 SLIDE 2 — Challenge
+                 ============================================================ -->
+            <section class="slide" data-title="課題提示">
+                <div class="slide-inner" style="gap: 20px;">
+                    <div class="section-header">
+                        <span class="tag">Background &amp; Challenge</span>
+                        <h2 class="section-title">解決したい課題</h2>
+                    </div>
+
+                    <div class="challenge-layout">
+                        <div class="profile-card">
+                            <img class="avatar" src="4歳画伯.png" alt="4歳画伯">
+                            <div class="profile-name">田中(@ay_tanaka)</div>
+                            <div class="profile-items">
+                                <div class="profile-item">
+                                    <span class="profile-label">所属</span>
+                                    <span class="profile-value">株式会社エスユーエス(SUS Co., Ltd.)</span>
+                                </div>
+                                <div class="profile-item">
+                                    <span class="profile-label">業種</span>
+                                    <span class="profile-value">アウトソーシング</span>
+                                </div>
+                                <div class="profile-item">
+                                    <span class="profile-label">担当業務</span>
+                                    <span class="profile-value">AIエンジニア / PL / プリセールス支援</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="blocks-grid">
+                            <div class="info-block">
+                                <span class="block-label">Background</span>
+                                <div class="block-title">背景</div>
+                                <p class="block-body">AIエンジニアとして案件PL・プリセールスを担当</p>
+                            </div>
+                            <div class="info-block">
+                                <span class="block-label">Challenge</span>
+                                <div class="block-title">課題</div>
+                                <p class="block-body">調査・要件整理・資料化の工数が大きく、商談後の初動が重い</p>
+                            </div>
+                            <div class="info-block info-block--accent">
+                                <span class="block-label">Solution</span>
+                                <div class="block-title">解決策</div>
+                                <p class="block-body" style="font-weight: bold;">議事録から提案・見積・PoC計画・確認事項を生成する<br>AIエージェントシステムを構築</p>
+                            </div>
+                            <div class="info-block">
+                                <span class="block-label">Expected Impact</span>
+                                <div class="block-title">想定効果</div>
+                                <p class="block-body">資料作成コスト削減 / 属人化低減 / ナレッジ切替による横展開</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ============================================================
+                 SLIDE 3 — System Architecture
+                 ============================================================ -->
+            <section class="slide" data-title="システム構成">
+                <div class="slide-inner">
+                    <div class="section-header">
+                        <span class="tag">System Architecture</span>
+                        <h2 class="section-title">AIエージェントの全体像</h2>
+                    </div>
+
+                    <div class="flow">
+                        <div class="flow-box">
+                            <div class="flow-box-title">Input</div>
+                            <div class="flow-item">議事録テキスト</div>
+                            <div class="flow-item">RFP 文書</div>
+                        </div>
+
+                        <div class="flow-connector">
+                            <div class="flow-arrow">
+                                <div class="flow-arrow-line"></div>
+                                <div class="flow-arrow-head"></div>
+                            </div>
+                        </div>
+
+                        <div class="flow-box flow-box--process">
+                            <div class="flow-box-title">AI Agent</div>
+                            <div class="flow-item flow-item--step">
+                                <span class="flow-step-num">1</span>要件抽出・整理
+                            </div>
+                            <div class="flow-item flow-item--step">
+                                <span class="flow-step-num">2</span>Ask / Assume 判定
+                            </div>
+                            <div class="flow-item flow-item--step">
+                                <span class="flow-step-num">3</span>ナレッジ参照・補完
+                            </div>
+                            <div class="flow-item flow-item--step">
+                                <span class="flow-step-num">4</span>アウトプット生成
+                            </div>
+                        </div>
+
+                        <div class="flow-connector">
+                            <div class="flow-arrow">
+                                <div class="flow-arrow-line"></div>
+                                <div class="flow-arrow-head"></div>
+                            </div>
+                        </div>
+
+                        <div class="flow-box">
+                            <div class="flow-box-title">Output</div>
+                            <div class="flow-item flow-output-item"><span class="flow-check">✓</span> 提案書 HTML</div>
+                            <div class="flow-item flow-output-item"><span class="flow-check">✓</span> PoC計画</div>
+                            <div class="flow-item flow-output-item"><span class="flow-check">✓</span> 概算見積</div>
+                            <div class="flow-item flow-output-item"><span class="flow-check">✓</span> 確認事項</div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ============================================================
+                 SLIDE 4 — Differentiation
+                 ============================================================ -->
+            <section class="slide" data-title="差別化">
+                <div class="slide-inner">
+                    <div class="section-header">
+                        <span class="tag">Key Advantages</span>
+                        <h2 class="section-title">3つの差別化ポイント</h2>
+                    </div>
+
+                    <div class="diff-grid">
+                        <article class="diff-card">
+                            <div class="diff-num">01</div>
+                            <div class="diff-title">曖昧さを整理</div>
+                            <p class="diff-desc"><strong>Ask / Assume を自動分類</strong><br>曖昧なまま進めない</p>
+                        </article>
+
+                        <article class="diff-card">
+                            <div class="diff-num">02</div>
+                            <div class="diff-title">人が途中で介在</div>
+                            <p class="diff-desc"><strong>AIの仮定を人がレビュー</strong><br>精度と納得感を両立</p>
+                        </article>
+
+                        <article class="diff-card">
+                            <div class="diff-num">03</div>
+                            <div class="diff-title">次アクションまでつながる</div>
+                            <p class="diff-desc"><strong>次アクションまでつながる</strong><br>提案〜見積〜デモ提示まで支援</p>
+                        </article>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ============================================================
+                 SLIDE 5 — Closing
+                 ============================================================ -->
+            <!--
+                背景画像を差し替える場合:
+                下記 .slide--closing の style 属性に background-image を追加
+                例: style="background-image: linear-gradient(160deg, rgba(15,23,42,0.88), rgba(15,23,42,0.75)), url('./screenshot.png');"
+            -->
+            <section class="slide slide--dark slide--closing" data-title="締め">
+                <div class="slide-inner">
+                    <div class="closing-content">
+                        <span class="tag">Thank you</span>
+                        <div class="closing-bar"></div>
+                        <h1 class="closing-title">商談即提案</h1>
+                        <p class="closing-sub">議事録から 提案 / 見積 / PoC計画まで<br>自走するAIエージェント</p>
+                        <div class="closing-bar"></div>
+                    </div>
+                </div>
+            </section>
+
+        </div>
+    </div>
+
+    <div class="floating-ui">
+        <button class="mode-btn" id="modeToggle" type="button">連続表示</button>
+        <button class="nav-btn" id="prevBtn" type="button" aria-label="前のスライド">↑</button>
+        <button class="nav-btn" id="nextBtn" type="button" aria-label="次のスライド">↓</button>
+    </div>
+
+    <script>
+        (function () {
+            var root = document.getElementById('deckRoot');
+            var slidesWrap = document.getElementById('slides');
+            var slides = Array.from(document.querySelectorAll('.slide'));
+            var progressBar = document.getElementById('progressBar');
+            var leftRail = document.getElementById('leftRail');
+            var prevBtn = document.getElementById('prevBtn');
+            var nextBtn = document.getElementById('nextBtn');
+            var modeToggle = document.getElementById('modeToggle');
+            var currentIndex = 0;
+            var isContinuous = false;
+
+            slides.forEach(function (slide, index) {
+                var btn = document.createElement('button');
+                btn.className = 'dot';
+                btn.type = 'button';
+                btn.title = (slide.dataset.title || 'Slide') + ' ' + (index + 1);
+                btn.addEventListener('click', function () { goTo(index); });
+                leftRail.appendChild(btn);
+            });
+
+            var dots = Array.from(leftRail.querySelectorAll('.dot'));
+
+            function updateUI() {
+                dots.forEach(function (dot, i) { dot.classList.toggle('active', i === currentIndex); });
+                progressBar.style.width = ((currentIndex + 1) / slides.length) * 100 + '%';
+            }
+
+            function goTo(index) {
+                currentIndex = Math.max(0, Math.min(slides.length - 1, index));
+                slides[currentIndex].scrollIntoView({ behavior: 'smooth', block: 'start' });
+                updateUI();
+            }
+
+            function detectCurrentSlide() {
+                var viewportMid = window.innerHeight * 0.45;
+                var closestIndex = 0;
+                var closestDistance = Infinity;
+                slides.forEach(function (slide, index) {
+                    var rect = slide.getBoundingClientRect();
+                    var d = Math.abs(rect.top - viewportMid);
+                    if (d < closestDistance) {
+                        closestDistance = d;
+                        closestIndex = index;
+                    }
+                });
+                currentIndex = closestIndex;
+                updateUI();
+            }
+
+            function toggleMode() {
+                isContinuous = !isContinuous;
+                root.classList.toggle('continuous', isContinuous);
+                modeToggle.textContent = isContinuous ? 'スライド表示' : '連続表示';
+            }
+
+            prevBtn.addEventListener('click', function () { goTo(currentIndex - 1); });
+            nextBtn.addEventListener('click', function () { goTo(currentIndex + 1); });
+            modeToggle.addEventListener('click', toggleMode);
+
+            document.addEventListener('keydown', function (e) {
+                var k = e.key;
+                if (['ArrowDown', 'ArrowRight', 'PageDown', ' '].indexOf(k) !== -1) {
+                    e.preventDefault(); goTo(currentIndex + 1);
+                } else if (['ArrowUp', 'ArrowLeft', 'PageUp'].indexOf(k) !== -1) {
+                    e.preventDefault(); goTo(currentIndex - 1);
+                } else if (k === 'Home') {
+                    e.preventDefault(); goTo(0);
+                } else if (k === 'End') {
+                    e.preventDefault(); goTo(slides.length - 1);
+                }
+            });
+
+            slidesWrap.addEventListener('scroll', function () {
+                window.requestAnimationFrame(detectCurrentSlide);
+            }, { passive: true });
+
+            window.addEventListener('resize', detectCurrentSlide);
+            updateUI();
+        })();
+    </script>
+</body>
+</html>

@@ -1,0 +1,186 @@
+{
+    "common": [
+        {
+            "phase": "要件整理",
+            "task": "議事録整理と Ask / Assume の洗い出し",
+            "role": "pm",
+            "days": 1.0
+        },
+        {
+            "phase": "提案設計",
+            "task": "提案骨子とソリューション案の作成",
+            "role": "pm",
+            "days": 1.0
+        },
+        {
+            "phase": "見積",
+            "task": "WBS と概算見積の整理",
+            "role": "pm",
+            "days": 0.5
+        },
+        {
+            "phase": "管理",
+            "task": "リーダー管理工数",
+            "role": "pm",
+            "days": 1.5
+        },
+        {
+            "phase": "報告",
+            "task": "報告書作成",
+            "role": "app_engineer",
+            "days": 1.5
+        }
+    ],
+    "rag_chat": [
+        {
+            "phase": "データ収集",
+            "task": "検索対象文書の収集・整理",
+            "role": "app_engineer",
+            "days": 4.0
+        },
+        {
+            "phase": "開発",
+            "task": "AI機能の実装（RAG検索・回答生成）",
+            "role": "ai_engineer",
+            "days": 5.0
+        },
+        {
+            "phase": "開発",
+            "task": "簡易UIの実装（チャットUI）",
+            "role": "app_engineer",
+            "days": 1.5
+        },
+        {
+            "phase": "テスト",
+            "task": "テストケース作成",
+            "role": "app_engineer",
+            "days": 1.0
+        },
+        {
+            "phase": "テスト",
+            "task": "テスト実施",
+            "role": "app_engineer",
+            "days": 3.0
+        },
+        {
+            "phase": "テスト",
+            "task": "テスト結果分析・精度向上",
+            "role": "ai_engineer",
+            "days": 7.0
+        }
+    ],
+    "form_judgement": [
+        {
+            "phase": "データ収集",
+            "task": "判定ルール・チェックリストの整理",
+            "role": "app_engineer",
+            "days": 2.0
+        },
+        {
+            "phase": "開発",
+            "task": "AI機能の実装（判定ロジック・不足項目検知）",
+            "role": "ai_engineer",
+            "days": 5.0
+        },
+        {
+            "phase": "開発",
+            "task": "簡易UIの実装（入力フォーム・結果表示）",
+            "role": "app_engineer",
+            "days": 1.5
+        },
+        {
+            "phase": "テスト",
+            "task": "テストケース作成",
+            "role": "app_engineer",
+            "days": 1.0
+        },
+        {
+            "phase": "テスト",
+            "task": "テスト実施",
+            "role": "app_engineer",
+            "days": 3.0
+        },
+        {
+            "phase": "テスト",
+            "task": "テスト結果分析・精度向上",
+            "role": "ai_engineer",
+            "days": 5.0
+        }
+    ],
+    "faq_search": [
+        {
+            "phase": "データ収集",
+            "task": "FAQ・規程データの収集・整理",
+            "role": "app_engineer",
+            "days": 2.0
+        },
+        {
+            "phase": "開発",
+            "task": "AI機能の実装（FAQ検索・候補回答生成）",
+            "role": "ai_engineer",
+            "days": 4.0
+        },
+        {
+            "phase": "開発",
+            "task": "簡易UIの実装（検索UI・回答表示）",
+            "role": "app_engineer",
+            "days": 1.0
+        },
+        {
+            "phase": "テスト",
+            "task": "テストケース作成",
+            "role": "app_engineer",
+            "days": 1.0
+        },
+        {
+            "phase": "テスト",
+            "task": "テスト実施",
+            "role": "app_engineer",
+            "days": 2.0
+        },
+        {
+            "phase": "テスト",
+            "task": "テスト結果分析・精度向上",
+            "role": "ai_engineer",
+            "days": 4.0
+        }
+    ],
+    "interactive_roleplay": [
+        {
+            "phase": "データ収集",
+            "task": "シナリオ・想定問答の収集・整理",
+            "role": "app_engineer",
+            "days": 3.0
+        },
+        {
+            "phase": "開発",
+            "task": "AI機能の実装（対話制御・フィードバック生成）",
+            "role": "ai_engineer",
+            "days": 3.5
+        },
+        {
+            "phase": "開発",
+            "task": "簡易UIの実装（会話UI・評価結果表示）",
+            "role": "app_engineer",
+            "days": 1.5
+        },
+        {
+            "phase": "テスト",
+            "task": "テストケース作成",
+            "role": "app_engineer",
+            "days": 1.5
+        },
+        {
+            "phase": "テスト",
+            "task": "テスト実施",
+            "role": "app_engineer",
+            "days": 3.0
+        },
+        {
+            "phase": "テスト",
+            "task": "テスト結果分析・精度向上",
+            "role": "ai_engineer",
+            "days": 10.0
+        }
+    ]
+}
