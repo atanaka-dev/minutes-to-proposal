@@ -27,7 +27,7 @@
         {
             "phase": "報告",
             "task": "報告書作成",
-            "role": "app_engineer",
+            "role": "ai_engineer",
             "days": 1.5
         }
     ],
@@ -35,7 +35,7 @@
         {
             "phase": "データ収集",
             "task": "検索対象文書の収集・整理",
-            "role": "app_engineer",
+            "role": "ai_engineer",
             "days": 4.0
         },
         {
@@ -47,19 +47,19 @@
         {
             "phase": "開発",
             "task": "簡易UIの実装（チャットUI）",
-            "role": "app_engineer",
+            "role": "ai_engineer",
             "days": 1.5
         },
         {
             "phase": "テスト",
             "task": "テストケース作成",
-            "role": "app_engineer",
+            "role": "ai_engineer",
             "days": 1.0
         },
         {
             "phase": "テスト",
             "task": "テスト実施",
-            "role": "app_engineer",
+            "role": "ai_engineer",
             "days": 3.0
         },
         {
@@ -73,7 +73,7 @@
         {
             "phase": "データ収集",
             "task": "判定ルール・チェックリストの整理",
-            "role": "app_engineer",
+            "role": "ai_engineer",
             "days": 2.0
         },
         {
@@ -85,19 +85,19 @@
         {
             "phase": "開発",
             "task": "簡易UIの実装（入力フォーム・結果表示）",
-            "role": "app_engineer",
+            "role": "ai_engineer",
             "days": 1.5
         },
         {
             "phase": "テスト",
             "task": "テストケース作成",
-            "role": "app_engineer",
+            "role": "ai_engineer",
             "days": 1.0
         },
         {
             "phase": "テスト",
             "task": "テスト実施",
-            "role": "app_engineer",
+            "role": "ai_engineer",
             "days": 3.0
         },
         {
@@ -111,7 +111,7 @@
         {
             "phase": "データ収集",
             "task": "FAQ・規程データの収集・整理",
-            "role": "app_engineer",
+            "role": "ai_engineer",
             "days": 2.0
         },
         {
@@ -123,19 +123,19 @@
         {
             "phase": "開発",
             "task": "簡易UIの実装（検索UI・回答表示）",
-            "role": "app_engineer",
+            "role": "ai_engineer",
             "days": 1.0
         },
         {
             "phase": "テスト",
             "task": "テストケース作成",
-            "role": "app_engineer",
+            "role": "ai_engineer",
             "days": 1.0
         },
         {
             "phase": "テスト",
             "task": "テスト実施",
-            "role": "app_engineer",
+            "role": "ai_engineer",
             "days": 2.0
         },
         {
@@ -149,7 +149,7 @@
         {
             "phase": "データ収集",
             "task": "シナリオ・想定問答の収集・整理",
-            "role": "app_engineer",
+            "role": "ai_engineer",
             "days": 3.0
         },
         {
@@ -161,19 +161,19 @@
         {
             "phase": "開発",
             "task": "簡易UIの実装（会話UI・評価結果表示）",
-            "role": "app_engineer",
+            "role": "ai_engineer",
             "days": 1.5
         },
         {
             "phase": "テスト",
             "task": "テストケース作成",
-            "role": "app_engineer",
+            "role": "ai_engineer",
             "days": 1.5
         },
         {
             "phase": "テスト",
             "task": "テスト実施",
-            "role": "app_engineer",
+            "role": "ai_engineer",
             "days": 3.0
         },
         {

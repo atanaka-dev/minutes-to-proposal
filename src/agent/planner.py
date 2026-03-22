@@ -138,6 +138,9 @@ def _build_context_summary(
         summary["matched_case"] = (
             matched.get("summary", "あり") if isinstance(matched, dict) else None
         )
+        matched_cases = knowledge.get("matched_cases")
+        if isinstance(matched_cases, list) and matched_cases:
+            summary["matched_cases_count"] = len(matched_cases)
 
     from src.schemas.presales import ProposalPackage
 

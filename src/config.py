@@ -20,6 +20,7 @@ class AppConfig:
         openai_critique_model: 批評タスク向けの OpenAI モデル名。
         openai_planner_model: 判断中枢（Planner）向けの OpenAI モデル名。
         openai_recover_model: 復旧タスク向けの OpenAI モデル名。
+        openai_embedding_model: Embedding 生成向けの OpenAI モデル名。
         openai_api_base_url: OpenAI API のベース URL。
         openai_timeout_sec: OpenAI API のタイムアウト秒数。
         log_level: ログレベル（DEBUG / INFO / WARNING / ERROR）。
@@ -37,6 +38,7 @@ class AppConfig:
     openai_critique_model: str = "gpt-5-nano"
     openai_planner_model: str = "gpt-5-mini"
     openai_recover_model: str = "gpt-5-mini"
+    openai_embedding_model: str = "text-embedding-3-large"
     openai_api_base_url: str = "https://api.openai.com/v1"
     openai_timeout_sec: float = 90.0
     log_level: str = "INFO"
@@ -61,6 +63,7 @@ class AppConfig:
             openai_critique_model=_env("OPENAI_CRITIQUE_MODEL", env_defaults, "gpt-5-nano"),
             openai_planner_model=_env("OPENAI_PLANNER_MODEL", env_defaults, "gpt-5-mini"),
             openai_recover_model=_env("OPENAI_RECOVER_MODEL", env_defaults, "gpt-5-mini"),
+            openai_embedding_model=_env("OPENAI_EMBEDDING_MODEL", env_defaults, "text-embedding-3-large"),
             openai_api_base_url=_env(
                 "OPENAI_API_BASE_URL",
                 env_defaults,

@@ -20,7 +20,7 @@ from src.schemas.presales import (
     UnknownItem,
     WBSRow,
 )
-from src.services.openai_client import OpenAIChatClient, OpenAIClientError
+from src.services.openai_client import OpenAIChatClient, OpenAIClientError, EmbeddingResponse
 
 logger = logging.getLogger(__name__)
 
@@ -110,7 +110,9 @@ def lookup_knowledge_assets(
         "proposal_template": (templates_dir / "proposal_template.html").read_text(encoding="utf-8"),
     }
     app_type = select_demo_app_type(structured_input)
-    matched_case = _match_past_case(knowledge["past_cases"], app_type)
+    matched_cases = _search_past_cases(
+        knowledge["past_cases"], structured_input, app_type, knowledge_dir, config,
+    )
     references = [
         KnowledgeReference(
             name="standard_wbs",
@@ -128,15 +130,16 @@ def lookup_knowledge_assets(
             summary="提案時に使う標準リスクカタログ",
         ),
     ]
-    if matched_case:
+    for case in matched_cases:
         references.append(
             KnowledgeReference(
-                name=matched_case["name"],
+                name=case["name"],
                 source_type="past_case",
-                summary=matched_case["summary"],
+                summary=case["summary"],
             )
         )
-    knowledge["matched_case"] = matched_case
+    knowledge["matched_cases"] = matched_cases
+    knowledge["matched_case"] = matched_cases[0] if matched_cases else None
     return knowledge, references
 
 
@@ -815,7 +818,7 @@ def _build_narrative_with_meta(
 
     try:
         client = OpenAIChatClient(config)
-        matched_case = knowledge.get("matched_case")
+        matched_cases_for_prompt: list[dict] = knowledge.get("matched_cases") or []
         challenge_points_json = json.dumps(
             structured_input.challenge_points,
             ensure_ascii=False,
@@ -847,11 +850,11 @@ def _build_narrative_with_meta(
                 "\n- 次回確認事項（ask_blockers）と矛盾する内容を提案文に含めないこと"
                 "\n\n## 各キーの制約"
                 "\n- summary_text: 提案の要約を1〜2文で記述"
-                "\n- solution_summary: 提案内容を Markdown で構造化"
+                "\n- solution_summary: 提案内容を Markdown で構造化（各見出しは行頭の `# ` のみ）"
                 "\n  1. `# 概要` — 1〜2文で全体像を説明"
                 "\n  2. `# 主要機能` — `## 機能名` ごとに `- ` 箇条書きで詳細を記述"
-                "\n  3. `# 進め方` — 工期・フェーズの概要"
-                "\n  4. 必要に応じて `# 留意点` を追加"
+                "\n  3. `# 進め方` — キックオフ〜検証〜収束の流れを箇条書き"
+                "\n  4. `# 留意点` — 制約・未確定事項・見積の位置づけ（過去実績は別スライドで差し込むため本文では触れるのみ）"
                 "\n- next_questions: 5件以上7件以下の配列"
                 "\n- demo_selection_reason: 冒頭に結論1文、根拠を箇条書き（`- ` 始まり）で2〜4件"
                 "\n\n## 出力"
@@ -869,7 +872,7 @@ def _build_narrative_with_meta(
                 f"\n- ask_blockers: {ask_blockers_json}"
                 f"\n- confirmation_items: {confirmation_items_json}"
                 f"\n- app_type: {app_type}"
-                f"\n- matched_case: {matched_case['summary'] if matched_case else 'なし'}"
+                f"\n- matched_cases: {json.dumps([c['summary'] for c in matched_cases_for_prompt], ensure_ascii=False) if matched_cases_for_prompt else 'なし'}"
                 f"\n- estimate_total_jpy: {estimate.total_jpy}"
             ),
             response_format=_NARRATIVE_RESPONSE_FORMAT,
@@ -1667,6 +1670,125 @@ def _render_assume_items_for_proposal(
     )
 
 
+def _split_solution_h1_sections(md: str) -> dict[str, str]:
+    """solution_summary 内の `# 見出し`（単独 #）で区切られた節を収集する。"""
+    sections: dict[str, str] = {}
+    current_key: str | None = None
+    buf: list[str] = []
+    for line in md.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("#") and not stripped.startswith("##"):
+            if current_key is not None:
+                sections[current_key] = "\n".join(buf).strip()
+            title = stripped[1:].lstrip()
+            current_key = title.strip() or None
+            buf = []
+            continue
+        if current_key is not None:
+            buf.append(line)
+    if current_key is not None:
+        sections[current_key] = "\n".join(buf).strip()
+    return sections
+
+
+def _default_progress_markdown() -> str:
+    return "\n".join(
+        [
+            "- **キックオフ**: 目的・対象範囲・成功指標の合意、データ・環境の前提確認",
+            "- **設計・実装**: プロトタイプを短いサイクルで反復し、評価指標で検証",
+            "- **収束**: 次フェーズ（本番設計・運用）に向けた論点整理とたたき台提出",
+        ]
+    )
+
+
+def _default_notes_markdown(structured_input: StructuredInput) -> str:
+    lines: list[str] = []
+    if structured_input.blocker_ask_items:
+        lines.append(
+            "- 未確定の確認事項（Ask）により、スコープ・スケジュールが変動し得ます"
+        )
+    if structured_input.constraints:
+        lines.append(f"- 制約: {structured_input.constraints[0]}")
+    lines.append("- 本資料の見積・工期は概算であり、詳細設計後に精査が必要です")
+    return "\n".join(lines)
+
+
+def _render_single_case_card_html(case: dict) -> str:
+    """過去実績1件をカード風 HTML 断片として返す。"""
+    name = escape(str(case.get("name") or ""))
+    summary = escape(str(case.get("summary") or ""))
+    rows: list[str] = []
+    for label, key in (
+        ("業種", "industry"),
+        ("背景", "background"),
+        ("目的", "purpose"),
+        ("検証結果", "result"),
+        ("成果", "outcome"),
+    ):
+        val = case.get(key)
+        if val:
+            rows.append(
+                f'<tr><th style="white-space:nowrap;vertical-align:top;'
+                f'padding:6px 12px 6px 0;color:var(--text-soft);font-weight:600;">'
+                f'{label}</th>'
+                f'<td style="padding:6px 0;">{escape(str(val))}</td></tr>'
+            )
+    table = f'<table style="border-collapse:collapse;width:100%;font-size:0.95em;">{"".join(rows)}</table>'
+    return (
+        f'<div style="padding:20px 24px;border-radius:var(--radius-lg);'
+        f'border:1px solid var(--border);background:var(--panel);margin-bottom:16px;">'
+        f'<h4 style="margin:0 0 4px;">{name}</h4>'
+        f'<p style="color:var(--text-soft);margin:0 0 12px;">{summary}</p>'
+        f'{table}'
+        f'</div>'
+    )
+
+
+def _render_past_cases_detail_html(cases: list[dict]) -> str:
+    """提案ソリューション過去実績スライド向け HTML。"""
+    if not cases:
+        return '<p>ナレッジに登録された類似案件はありません。</p>'
+    return "\n".join(_render_single_case_card_html(c) for c in cases)
+
+
+def _solution_slides_html(
+    solution_md: str,
+    matched_cases: list[dict],
+    structured_input: StructuredInput,
+) -> tuple[str, str, str, str]:
+    """提案ソリューション 4 枚分の HTML（solution-box 内にそのまま埋め込む）。"""
+    text = (solution_md or "").strip()
+    sections = _split_solution_h1_sections(text)
+    if not sections and text:
+        sections = {
+            "概要": text,
+            "主要機能": "",
+            "進め方": _default_progress_markdown(),
+            "留意点": _default_notes_markdown(structured_input),
+        }
+    overview = sections.get("概要") or ""
+    features = sections.get("主要機能") or ""
+    progress = sections.get("進め方") or _default_progress_markdown()
+    notes = (
+        sections.get("留意点")
+        or sections.get("注意点")
+        or _default_notes_markdown(structured_input)
+    )
+    parts1: list[str] = []
+    if overview:
+        parts1.append(f"# 概要\n{overview}")
+    if features:
+        parts1.append(f"# 主要機能\n{features}")
+    body1 = "\n\n".join(parts1)
+    if not body1.strip():
+        body1 = "# 概要\n（提案本文の解析に失敗したか、記載がありません）"
+    slide1 = _md_to_html(body1)
+    slide2 = _md_to_html(f"# 進め方\n{progress}")
+    slide3 = _md_to_html(f"# 留意点\n{notes}")
+    slide4 = _render_past_cases_detail_html(matched_cases)
+    return slide1, slide2, slide3, slide4
+
+
 def _render_proposal_html(
     template: str,
     structured_input: StructuredInput,
@@ -1678,9 +1800,15 @@ def _render_proposal_html(
     app_type: DemoAppType,
     solution_summary: str,
 ) -> str:
-    matched_case = knowledge.get("matched_case")
-    case_summary = matched_case["summary"] if matched_case else "該当する過去案件は未設定"
+    matched_cases: list[dict] = knowledge.get("matched_cases") or []
+    if matched_cases:
+        case_summaries = "、".join(c["name"] for c in matched_cases)
+    else:
+        case_summaries = "該当する過去案件は未設定"
     risks = _select_risks(knowledge["risk_catalog"], structured_input, app_type)
+    sol1, sol2, sol3, sol4 = _solution_slides_html(
+        solution_summary, matched_cases, structured_input
+    )
     html_params = {
         "client_name": escape(structured_input.client_name),
         "project_title": escape(structured_input.project_title),
@@ -1706,10 +1834,13 @@ def _render_proposal_html(
             [
                 "標準 WBS テンプレートを参照して初期計画を生成",
                 "単価表を用いて概算見積を算出",
-                f"類似案件: {case_summary}",
+                f"類似案件: {case_summaries}",
             ]
         ),
-        "solution_summary": _md_to_html(solution_summary),
+        "solution_slide_1": sol1,
+        "solution_slide_2": sol2,
+        "solution_slide_3": sol3,
+        "solution_slide_4": sol4,
         "wbs_rows": _wbs_table_rows(wbs),
         "estimate_duration": f"約{estimate.duration_weeks}週間",
         "estimate_total_days": f"{estimate.total_days:.1f}人日",
@@ -1768,7 +1899,13 @@ def _build_solution_summary(structured_input: StructuredInput, app_type: DemoApp
     if confirmation_notes:
         bullets.append(f"確認カード反映: {' / '.join(confirmation_notes[:2])}")
     bullet_lines = "\n".join(f"- {b}" for b in bullets)
-    return f"{overview}\n提案フェーズでは、議事録から抽出した課題と制約に合わせて PoC 範囲を絞ります。\n\n{bullet_lines}"
+    return (
+        f"# 概要\n{overview}\n\n"
+        "提案フェーズでは、議事録から抽出した課題と制約に合わせて PoC 範囲を絞ります。\n\n"
+        f"# 主要機能\n{bullet_lines}\n\n"
+        f"# 進め方\n{_default_progress_markdown()}\n\n"
+        f"# 留意点\n{_default_notes_markdown(structured_input)}"
+    )
 
 
 def _wbs_table_rows(wbs: list[WBSRow]) -> str:
@@ -1847,7 +1984,162 @@ def _md_to_html(text: str) -> str:
     return "\n".join(out)
 
 
+_MAX_PAST_CASES = 3
+_EMBEDDING_CACHE_FILE = ".past_cases_embeddings.json"
+
+
+def _case_search_text(case: dict) -> str:
+    """過去実績1件を Embedding 用の単一テキストに変換する。"""
+    parts = [
+        case.get("name", ""),
+        case.get("summary", ""),
+        case.get("background", ""),
+        case.get("purpose", ""),
+        case.get("result", ""),
+        case.get("detail", ""),
+        case.get("industry", ""),
+    ]
+    keywords = case.get("tech_keywords")
+    if keywords:
+        parts.append(" ".join(keywords))
+    return " ".join(p for p in parts if p)
+
+
+def _query_search_text(structured_input: StructuredInput, app_type: str) -> str:
+    """提案内容から過去実績検索用のクエリテキストを組み立てる。"""
+    parts = [
+        structured_input.goal_summary,
+        *structured_input.challenge_points,
+        *structured_input.requested_capabilities,
+        *structured_input.constraints,
+        app_type,
+    ]
+    return " ".join(p for p in parts if p)
+
+
+def _cosine_similarity(a: list[float], b: list[float]) -> float:
+    dot = sum(x * y for x, y in zip(a, b))
+    norm_a = math.sqrt(sum(x * x for x in a))
+    norm_b = math.sqrt(sum(x * x for x in b))
+    if norm_a == 0 or norm_b == 0:
+        return 0.0
+    return dot / (norm_a * norm_b)
+
+
+def _load_embedding_cache(cache_path: Path) -> dict | None:
+    if not cache_path.exists():
+        return None
+    try:
+        return json.loads(cache_path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return None
+
+
+def _save_embedding_cache(
+    cache_path: Path,
+    model: str,
+    source_hash: str,
+    embeddings: list[list[float]],
+) -> None:
+    cache_path.write_text(
+        json.dumps(
+            {"model": model, "source_hash": source_hash, "embeddings": embeddings},
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+
+
+def _cases_content_hash(past_cases: list[dict]) -> str:
+    """past_cases の内容が変わったかを検知するための簡易ハッシュ。"""
+    import hashlib
+    raw = json.dumps(past_cases, ensure_ascii=False, sort_keys=True)
+    return hashlib.sha256(raw.encode()).hexdigest()[:16]
+
+
+def _get_case_embeddings(
+    past_cases: list[dict],
+    knowledge_dir: Path,
+    config: AppConfig,
+) -> list[list[float]] | None:
+    """キャッシュ済み埋め込みを返す。キャッシュが古い/無い場合は API で生成してキャッシュする。"""
+    cache_path = knowledge_dir / _EMBEDDING_CACHE_FILE
+    content_hash = _cases_content_hash(past_cases)
+    model = config.openai_embedding_model
+
+    cached = _load_embedding_cache(cache_path)
+    if (
+        cached
+        and cached.get("source_hash") == content_hash
+        and cached.get("model") == model
+        and len(cached.get("embeddings", [])) == len(past_cases)
+    ):
+        logger.info("Past-case embeddings loaded from cache")
+        return cached["embeddings"]
+
+    if not config.use_live_api():
+        return None
+
+    try:
+        client = OpenAIChatClient(config)
+        texts = [_case_search_text(c) for c in past_cases]
+        resp = client.embed(texts)
+        _save_embedding_cache(cache_path, model, content_hash, resp.embeddings)
+        logger.info("Past-case embeddings generated and cached (%d cases)", len(past_cases))
+        return resp.embeddings
+    except OpenAIClientError as exc:
+        logger.warning("Past-case embedding generation failed: %s", exc)
+        return None
+
+
+def _search_past_cases(
+    past_cases: list[dict],
+    structured_input: StructuredInput,
+    app_type: str,
+    knowledge_dir: Path,
+    config: AppConfig,
+) -> list[dict]:
+    """過去実績を Embedding 類似度で検索し、上位 _MAX_PAST_CASES 件を返す。"""
+    if not past_cases:
+        return []
+
+    case_embeddings = _get_case_embeddings(past_cases, knowledge_dir, config)
+
+    if case_embeddings is None:
+        # フォールバック: app_type 一致で最大1件
+        for case in past_cases:
+            if case.get("app_type") == app_type:
+                return [case]
+        return []
+
+    query_text = _query_search_text(structured_input, app_type)
+    if not config.use_live_api():
+        for case in past_cases:
+            if case.get("app_type") == app_type:
+                return [case]
+        return []
+
+    try:
+        client = OpenAIChatClient(config)
+        query_resp = client.embed([query_text])
+        query_vec = query_resp.embeddings[0]
+    except OpenAIClientError as exc:
+        logger.warning("Query embedding failed, falling back to app_type match: %s", exc)
+        for case in past_cases:
+            if case.get("app_type") == app_type:
+                return [case]
+        return []
+
+    scored = [
+        (i, _cosine_similarity(query_vec, case_embeddings[i]))
+        for i in range(len(past_cases))
+    ]
+    scored.sort(key=lambda x: x[1], reverse=True)
+    return [past_cases[i] for i, _ in scored[:_MAX_PAST_CASES]]
+
+
 def _match_past_case(past_cases: list[dict], app_type: DemoAppType) -> dict | None:
+    """後方互換用: app_type 一致で最初の1件を返す。"""
     for case in past_cases:
         if case["app_type"] == app_type:
             return case

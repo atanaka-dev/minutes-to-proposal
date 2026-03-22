@@ -37,5 +37,8 @@ logs/
 .ruff_cache/
 .mypy_cache/
 
+# Embedding cache
+knowledge/.past_cases_embeddings.json
+
 # Streamlit
 .streamlit/secrets.toml
