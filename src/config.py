@@ -29,6 +29,9 @@ class AppConfig:
         artifacts_dir: 生成成果物の保存先。
         knowledge_dir: ローカル知識資産の保存先。
         templates_dir: テンプレートの保存先。
+        openai_research_model: ソリューション調査（Web検索統合）向けの OpenAI モデル名。
+        web_search_enabled: Web検索を有効にするか。
+        web_search_max_queries: 1回の調査で発行する最大検索クエリ数。
     """
 
     openai_api_key: str = ""
@@ -38,12 +41,15 @@ class AppConfig:
     openai_critique_model: str = "gpt-5-nano"
     openai_planner_model: str = "gpt-5-mini"
     openai_recover_model: str = "gpt-5-mini"
+    openai_research_model: str = "gpt-5-nano"
     openai_embedding_model: str = "text-embedding-3-large"
     openai_api_base_url: str = "https://api.openai.com/v1"
     openai_timeout_sec: float = 90.0
+    web_search_enabled: bool = True
+    web_search_max_queries: int = 5
     log_level: str = "INFO"
-    max_steps: int = 6
-    time_budget_sec: float = 480.0
+    max_steps: int = 8
+    time_budget_sec: float = 720.0
     artifacts_dir: str = "artifacts"
     knowledge_dir: str = "knowledge"
     templates_dir: str = "templates"
@@ -63,6 +69,7 @@ class AppConfig:
             openai_critique_model=_env("OPENAI_CRITIQUE_MODEL", env_defaults, "gpt-5-nano"),
             openai_planner_model=_env("OPENAI_PLANNER_MODEL", env_defaults, "gpt-5-mini"),
             openai_recover_model=_env("OPENAI_RECOVER_MODEL", env_defaults, "gpt-5-mini"),
+            openai_research_model=_env("OPENAI_RESEARCH_MODEL", env_defaults, "gpt-5-nano"),
             openai_embedding_model=_env("OPENAI_EMBEDDING_MODEL", env_defaults, "text-embedding-3-large"),
             openai_api_base_url=_env(
                 "OPENAI_API_BASE_URL",
@@ -70,6 +77,8 @@ class AppConfig:
                 "https://api.openai.com/v1",
             ),
             openai_timeout_sec=float(_env("OPENAI_TIMEOUT_SEC", env_defaults, "45")),
+            web_search_enabled=_env("WEB_SEARCH_ENABLED", env_defaults, "true").lower() in ("true", "1", "yes"),
+            web_search_max_queries=int(_env("WEB_SEARCH_MAX_QUERIES", env_defaults, "5")),
             log_level=_env("LOG_LEVEL", env_defaults, "INFO"),
             artifacts_dir=_env("ARTIFACTS_DIR", env_defaults, "artifacts"),
             knowledge_dir=_env("KNOWLEDGE_DIR", env_defaults, "knowledge"),
@@ -85,6 +94,7 @@ class AppConfig:
             "critique": self.openai_critique_model or self.openai_model,
             "planner": self.openai_planner_model or self.openai_model,
             "recover": self.openai_recover_model or self.openai_model,
+            "research": self.openai_research_model or self.openai_model,
         }
         return mapping.get(purpose, self.openai_model)
 

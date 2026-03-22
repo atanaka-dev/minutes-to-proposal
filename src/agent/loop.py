@@ -18,6 +18,7 @@ from src.config import AppConfig
 from src.schemas.presales import (
     DemoAppArtifact,
     ProposalPackage,
+    SolutionContext,
     StructuredInput,
 )
 from src.schemas.trace import TraceEvent, TraceLog
@@ -68,6 +69,7 @@ class AgentLoop:
     _SEQUENCE = [
         "extract_presales_input",
         "lookup_knowledge_assets",
+        "research_solution_context",
         "build_proposal_package",
         "critique_proposal_package",
         "generate_demo_app",
@@ -460,11 +462,13 @@ class AgentLoop:
         return (
             "extract_presales_input -> [planner] -> "
             "lookup_knowledge_assets -> [planner] -> "
+            "research_solution_context -> "
             "build_proposal_package -> "
             "critique_proposal_package -> [planner] -> "
             "generate_demo_app "
             f"(extract={self.config.model_for('extract')}, "
             f"generate={self.config.model_for('generate')}, "
+            f"research={self.config.model_for('research')}, "
             f"critique={self.config.model_for('critique')}, "
             f"planner={self.config.model_for('planner')})"
         )
@@ -499,13 +503,22 @@ class AgentLoop:
                 "structured_input": context["extract_presales_input"],
                 "config": self.config,
             }
+        if tool_name == "research_solution_context":
+            lookup_data = context["lookup_knowledge_assets"]
+            return {
+                "structured_input": context["extract_presales_input"],
+                "knowledge": lookup_data["knowledge"],
+                "config": self.config,
+            }
         if tool_name == "build_proposal_package":
             lookup_data = context["lookup_knowledge_assets"]
+            sc = context.get("research_solution_context")
             return {
                 "structured_input": context["extract_presales_input"],
                 "knowledge": lookup_data["knowledge"],
                 "references": lookup_data["references"],
                 "config": self.config,
+                "solution_context": sc if isinstance(sc, SolutionContext) else None,
             }
         if tool_name == "generate_demo_app":
             return {
@@ -536,6 +549,8 @@ class AgentLoop:
             )
         if tool_name == "lookup_knowledge_assets":
             return "ローカルナレッジを参照し、提案生成に必要な入力が揃った。"
+        if tool_name == "research_solution_context":
+            return "Web検索と過去実績を統合し、ソリューション検討コンテキストを構築した。"
         if tool_name == "build_proposal_package":
             return "提案資料、WBS、概算見積、質問リストを生成した。"
         if tool_name == "critique_proposal_package":

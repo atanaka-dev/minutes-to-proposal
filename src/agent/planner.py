@@ -12,7 +12,7 @@ from dataclasses import asdict, dataclass, field
 from typing import Any, Literal
 
 from src.config import AppConfig
-from src.schemas.presales import StructuredInput
+from src.schemas.presales import SolutionContext, StructuredInput
 from src.services.openai_client import OpenAIChatClient, OpenAIClientError
 
 logger = logging.getLogger(__name__)
@@ -46,6 +46,7 @@ class PlannerDecision:
 _STAGE_ACTIONS: dict[str, list[PlannerAction]] = {
     "extract_presales_input": ["research_context"],
     "lookup_knowledge_assets": ["augment_assumptions"],
+    "research_solution_context": [],
     "critique_proposal_package": [],
 }
 
@@ -149,6 +150,12 @@ def _build_context_summary(
         summary["demo_app_type"] = pkg.demo_app_type
         summary["wbs_count"] = len(pkg.wbs)
         summary["estimate_total_jpy"] = pkg.estimate.total_jpy
+
+    sc = context.get("research_solution_context")
+    if isinstance(sc, SolutionContext):
+        summary["solution_context_available"] = True
+        summary["web_search_insights_count"] = len(sc.web_search_insights)
+        summary["past_case_insights_count"] = len(sc.past_case_insights)
 
     if context.get("research_context"):
         summary["research_done"] = True

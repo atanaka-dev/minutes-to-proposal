@@ -24,6 +24,15 @@ class OpenAIResponse:
 
 
 @dataclass
+class WebSearchResponse:
+    """Responses API (web_search) 呼び出し結果。"""
+
+    model: str
+    content: str
+    annotations: list[dict]
+
+
+@dataclass
 class EmbeddingResponse:
     """Embeddings API 呼び出し結果。"""
 
@@ -192,6 +201,82 @@ class OpenAIChatClient:
         return OpenAIResponse(
             model=model,
             content=str(content),
+        )
+
+    def web_search(self, *, purpose: str, prompt: str) -> WebSearchResponse:
+        """OpenAI Responses API の web_search ツールで検索付き回答を取得する。"""
+        model = self.config.model_for(purpose)
+        base = self.config.openai_api_base_url.rstrip("/")
+        if base.endswith("/v1"):
+            base = base[:-3]
+        url = f"{base}/v1/responses"
+        payload: dict = {
+            "model": model,
+            "tools": [{"type": "web_search_preview"}],
+            "input": prompt,
+            "reasoning": {"effort": "medium"},
+        }
+
+        logger.info(
+            "OpenAI web_search request: model=%s prompt_len=%d",
+            model,
+            len(prompt),
+        )
+
+        body = json.dumps(payload).encode("utf-8")
+        req = request.Request(
+            url,
+            data=body,
+            headers={
+                "Authorization": f"Bearer {self.config.openai_api_key}",
+                "Content-Type": "application/json",
+            },
+            method="POST",
+        )
+
+        try:
+            with request.urlopen(
+                req,
+                timeout=self.config.openai_timeout_sec,
+            ) as resp:
+                data = json.loads(resp.read().decode("utf-8"))
+        except HTTPError as exc:
+            detail = exc.read().decode("utf-8", errors="ignore")
+            logger.warning("OpenAI web_search HTTP %d: %s", exc.code, detail)
+            raise OpenAIClientError(f"HTTP {exc.code}: {detail}") from exc
+        except URLError as exc:
+            logger.warning("OpenAI web_search network error: %s", exc.reason)
+            raise OpenAIClientError(f"Network error: {exc.reason}") from exc
+        except TimeoutError as exc:
+            logger.warning("OpenAI web_search request timed out")
+            raise OpenAIClientError("Request timed out") from exc
+
+        content_parts: list[str] = []
+        annotations: list[dict] = []
+        for item in data.get("output", []):
+            if item.get("type") == "message":
+                for part in item.get("content", []):
+                    if part.get("type") == "output_text":
+                        content_parts.append(part.get("text", ""))
+                        for ann in part.get("annotations", []):
+                            if ann.get("type") == "url_citation":
+                                annotations.append({
+                                    "title": ann.get("title", ""),
+                                    "url": ann.get("url", ""),
+                                })
+
+        content = "\n".join(content_parts)
+        resp_model = data.get("model", model)
+        logger.info(
+            "OpenAI web_search OK: model=%s len=%d citations=%d",
+            resp_model,
+            len(content),
+            len(annotations),
+        )
+        return WebSearchResponse(
+            model=resp_model,
+            content=content,
+            annotations=annotations,
         )
 
     def embed(self, texts: list[str]) -> EmbeddingResponse:

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from src.config import AppConfig
 from src.schemas.presales import ProposalPackage, StructuredInput
+from src.schemas.presales import SolutionContext
 from src.services.presales import (
     augment_assumptions_service,
     build_proposal_package_with_meta,
@@ -10,6 +11,7 @@ from src.services.presales import (
     generate_demo_app_artifact,
     lookup_knowledge_assets,
     research_context_service,
+    research_solution_context_service,
 )
 from src.tools.base import ToolResult, ToolSpec
 
@@ -43,12 +45,14 @@ def _build_proposal_package(
     knowledge: dict,
     references: list,
     config: AppConfig,
+    solution_context: SolutionContext | None = None,
 ) -> ToolResult:
     package, used_model = build_proposal_package_with_meta(
         structured_input,
         knowledge,
         references,
         config,
+        solution_context=solution_context,
     )
     output = "提案資料 HTML、WBS、概算見積、次回確認事項を生成しました。"
     if used_model:
@@ -144,4 +148,31 @@ augment_assumptions_tool = ToolSpec(
     name="augment_assumptions",
     description="ナレッジとのギャップ分析を行い、不足している前提条件を Assume 候補として追加する",
     fn=_augment_assumptions,
+)
+
+
+# ------------------------------------------------------------------
+# Solution context research tool
+# ------------------------------------------------------------------
+
+
+def _research_solution_context(
+    structured_input: StructuredInput,
+    knowledge: dict,
+    config: AppConfig,
+) -> ToolResult:
+    context = research_solution_context_service(structured_input, knowledge, config)
+    web_count = len(context.web_search_insights)
+    case_count = len(context.past_case_insights)
+    output = (
+        f"ソリューション検討: Web検索{len(context.search_queries_used)}件実行 → "
+        f"最新技術示唆{web_count}件 + 過去実績知見{case_count}件を統合しました。"
+    )
+    return ToolResult(success=True, output=output, data=context)
+
+
+research_solution_context_tool = ToolSpec(
+    name="research_solution_context",
+    description="Web検索と過去実績を統合し、提案ソリューションの検討コンテキストを構築する",
+    fn=_research_solution_context,
 )

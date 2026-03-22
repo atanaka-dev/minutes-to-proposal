@@ -14,6 +14,7 @@ from src.tools.presales import (
     generate_demo_app_tool,
     lookup_knowledge_assets_tool,
     research_context_tool,
+    research_solution_context_tool,
 )
 
 DEMO_INPUT_PATH = Path("demo_inputs/sample.json")
@@ -21,6 +22,7 @@ DEMO_INPUT_PATH = Path("demo_inputs/sample.json")
 _ALL_TOOLS = [
     extract_presales_input_tool,
     lookup_knowledge_assets_tool,
+    research_solution_context_tool,
     build_proposal_package_tool,
     critique_proposal_package_tool,
     generate_demo_app_tool,

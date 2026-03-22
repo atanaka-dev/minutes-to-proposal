@@ -6,6 +6,7 @@ from src.services.presales import (
     generate_demo_app_artifact,
     lookup_knowledge_assets,
     research_context_service,
+    research_solution_context_service,
     select_demo_app_type,
 )
 
@@ -17,5 +18,6 @@ __all__ = [
     "generate_demo_app_artifact",
     "lookup_knowledge_assets",
     "research_context_service",
+    "research_solution_context_service",
     "select_demo_app_type",
 ]

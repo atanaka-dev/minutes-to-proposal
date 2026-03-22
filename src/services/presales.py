@@ -16,6 +16,7 @@ from src.schemas.presales import (
     IOStyle,
     KnowledgeReference,
     ProposalPackage,
+    SolutionContext,
     StructuredInput,
     UnknownItem,
     WBSRow,
@@ -143,47 +144,60 @@ def lookup_knowledge_assets(
     return knowledge, references
 
 
+_DEMO_TYPE_KEYWORDS: dict[str, list[tuple[str, int]]] = {
+    "rag_chat": [
+        ("RAG", 3), ("横断検索", 3), ("文書検索", 3), ("社内文書", 3),
+        ("チャットボット", 3), ("生成AI", 3), ("LLM", 3), ("ベクトル検索", 3),
+        ("ナレッジ共有", 3), ("ナレッジ活用", 3), ("ナレッジ検索", 3),
+        ("検索", 2), ("ドキュメント", 2), ("ナレッジ", 2),
+        ("チャット", 2), ("参照", 2),
+        ("資料", 1), ("マニュアル", 1), ("根拠", 1),
+    ],
+    "faq_search": [
+        ("FAQ", 3), ("ヘルプデスク", 3), ("よくある質問", 3),
+        ("Q&A", 3), ("問い合わせ対応", 3), ("問合せ対応", 3),
+        ("定型回答", 3), ("コールセンター", 3),
+        ("問い合わせ", 2), ("問合せ", 2), ("回答品質", 2),
+        ("回答候補", 2),
+    ],
+    "interactive_roleplay": [
+        ("ロールプレイ", 3), ("対話練習", 3), ("ボイスボット", 3),
+        ("顧客役", 3), ("模擬", 3), ("シミュレーション", 3),
+        ("練習", 2), ("訓練", 2), ("育成", 2), ("トレーニング", 2),
+        ("会話", 1), ("フィードバック", 1),
+    ],
+    "form_judgement": [
+        ("入力フォーム", 3), ("申請フォーム", 3), ("判定ロジック", 3),
+        ("審査", 3), ("査定", 3), ("ワークフロー", 3),
+        ("フォーム", 2), ("申請", 2), ("承認", 2), ("帳票", 2),
+        ("判定", 2),
+    ],
+}
+
+
 def select_demo_app_type(structured_input: StructuredInput) -> DemoAppType:
-    """抽出要件から簡易デモアプリの型を選ぶ。"""
+    """抽出要件からスコアリングで簡易デモアプリの型を選ぶ。"""
     text = " ".join(
         structured_input.requested_capabilities
         + structured_input.challenge_points
         + structured_input.constraints
-        + [structured_input.goal_summary]
+        + [structured_input.goal_summary, structured_input.project_title]
         + _confirmation_context_values(structured_input)
     )
-    if _has_any(
-        text,
-        ["FAQ", "問い合わせ", "問合せ", "ナレッジ検索", "ヘルプデスク"],
-    ):
-        return "faq_search"
-    if _has_any(
-        text,
-        [
-            "ロールプレイ",
-            "対話練習",
-            "練習",
-            "訓練",
-            "育成",
-            "ボイスボット",
-            "顧客役",
-            "会話",
-            "フィードバック",
-        ],
-    ):
-        return "interactive_roleplay"
-    if _has_any(
-        text,
-        [
-            "フォーム",
-            "入力",
-            "判定",
-            "申請",
-            "レポート",
-            "評価",
-        ],
-    ):
-        return "form_judgement"
+    lowered = text.lower()
+
+    scores: dict[str, int] = {}
+    for app_type, keywords in _DEMO_TYPE_KEYWORDS.items():
+        scores[app_type] = sum(w for kw, w in keywords if kw.lower() in lowered)
+
+    best = max(scores, key=lambda k: scores[k])
+    logger.info(
+        "demo_app_type scoring: %s → %s",
+        {k: v for k, v in scores.items() if v > 0},
+        best,
+    )
+    if scores[best] > 0:
+        return best
     return "rag_chat"
 
 
@@ -245,6 +259,7 @@ def build_proposal_package_with_meta(
     recompute_plan: bool = True,
     existing_wbs: list[WBSRow] | None = None,
     existing_estimate: EstimateSummary | None = None,
+    solution_context: SolutionContext | None = None,
 ) -> tuple[ProposalPackage, str | None]:
     """提案資料 HTML、WBS、見積、質問リストをまとめて生成する。"""
     if update_mode == "text_only":
@@ -269,6 +284,7 @@ def build_proposal_package_with_meta(
         app_type=app_type,
         estimate=estimate,
         config=config,
+        solution_context=solution_context,
     )
     next_questions = narrative["next_questions"]
     demo_selection_reason = narrative["demo_selection_reason"]
@@ -505,6 +521,256 @@ def _local_research_facts(si: StructuredInput) -> dict[str, str]:
             "同業界では複数の類似ソリューションが存在するため、差別化ポイントの明確化が重要"
         )
     return facts
+
+
+_SOLUTION_CONTEXT_RESPONSE_FORMAT: dict = {
+    "type": "json_schema",
+    "json_schema": {
+        "name": "solution_context",
+        "strict": True,
+        "schema": {
+            "type": "object",
+            "additionalProperties": False,
+            "properties": {
+                "recommended_architecture": {"type": "string"},
+                "tech_stack_rationale": {"type": "string"},
+                "past_case_insights": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                },
+                "web_search_insights": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                },
+                "technology_risks": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                },
+            },
+            "required": [
+                "recommended_architecture",
+                "tech_stack_rationale",
+                "past_case_insights",
+                "web_search_insights",
+                "technology_risks",
+            ],
+        },
+    },
+}
+
+
+def research_solution_context_service(
+    structured_input: StructuredInput,
+    knowledge: dict,
+    config: AppConfig,
+) -> SolutionContext:
+    """過去実績と Web 検索を統合し、ソリューション検討コンテキストを構築する。"""
+    app_type = select_demo_app_type(structured_input)
+    matched_cases: list[dict] = knowledge.get("matched_cases") or []
+    past_case_insights = _extract_past_case_insights(matched_cases)
+    queries = _build_search_queries(structured_input, app_type, matched_cases, config)
+
+    web_results: list[str] = []
+    if config.use_live_api() and config.web_search_enabled and queries:
+        web_results = _run_web_searches(queries, config)
+
+    if config.use_live_api():
+        try:
+            return _synthesize_solution_context(
+                structured_input=structured_input,
+                app_type=app_type,
+                past_case_insights=past_case_insights,
+                web_results=web_results,
+                queries=queries,
+                config=config,
+            )
+        except (
+            OpenAIClientError,
+            ValueError,
+            TypeError,
+            KeyError,
+            json.JSONDecodeError,
+        ) as exc:
+            logger.warning("ソリューション検討 LLM 統合に失敗しローカルのみ: %s", exc)
+
+    return _local_solution_context(past_case_insights, queries)
+
+
+def _build_search_queries(
+    structured_input: StructuredInput,
+    app_type: str,
+    matched_cases: list[dict],
+    config: AppConfig,
+) -> list[str]:
+    """構造化入力と過去実績から Web 検索クエリを生成する。"""
+    max_queries = config.web_search_max_queries
+
+    past_keywords: list[str] = []
+    for case in matched_cases:
+        past_keywords.extend(case.get("tech_keywords") or [])
+    past_keywords = list(dict.fromkeys(past_keywords))
+
+    app_type_labels = {
+        "rag_chat": "RAG チャット 社内文書検索",
+        "form_judgement": "フォーム入力 判定 自動化",
+        "faq_search": "FAQ 検索 問い合わせ対応",
+        "interactive_roleplay": "対話シミュレーション ロールプレイ 訓練",
+    }
+    app_label = app_type_labels.get(app_type, app_type)
+
+    queries: list[str] = []
+
+    queries.append(
+        f"{app_label} enterprise architecture best practices 2025"
+    )
+
+    if structured_input.challenge_points:
+        core_challenge = structured_input.challenge_points[0]
+        queries.append(f"{core_challenge} AI ソリューション 構成パターン")
+
+    if past_keywords:
+        tech_sample = " ".join(past_keywords[:4])
+        queries.append(f"{tech_sample} 最新代替技術 production ready 2025")
+
+    cap_text = " ".join(structured_input.requested_capabilities[:3])
+    if cap_text:
+        queries.append(f"{cap_text} 実装パターン クラウド構成")
+
+    if len(queries) < max_queries and structured_input.constraints:
+        constraint_text = structured_input.constraints[0]
+        queries.append(f"{constraint_text} 対応 AI システム構成")
+
+    return queries[:max_queries]
+
+
+def _run_web_searches(
+    queries: list[str],
+    config: AppConfig,
+) -> list[str]:
+    """検索クエリ群を実行し、結果テキストのリストを返す。"""
+    client = OpenAIChatClient(config)
+    results: list[str] = []
+    for query in queries:
+        try:
+            resp = client.web_search(purpose="research", prompt=query)
+            if resp.content.strip():
+                results.append(resp.content.strip())
+        except OpenAIClientError as exc:
+            logger.warning("Web検索に失敗 (query=%s): %s", query[:60], exc)
+    return results
+
+
+def _extract_past_case_insights(matched_cases: list[dict]) -> list[str]:
+    """過去実績の詳細から提案に活かせる知見を抽出する。"""
+    insights: list[str] = []
+    for case in matched_cases:
+        parts: list[str] = []
+        name = case.get("name", "")
+        if name:
+            parts.append(f"案件: {name}")
+        outcome = case.get("outcome")
+        if outcome:
+            parts.append(f"成果: {outcome}")
+        detail = case.get("detail")
+        if detail:
+            parts.append(f"詳細: {detail}")
+        keywords = case.get("tech_keywords")
+        if keywords:
+            parts.append(f"技術: {', '.join(keywords)}")
+        if parts:
+            insights.append(" / ".join(parts))
+    return insights
+
+
+def _synthesize_solution_context(
+    *,
+    structured_input: StructuredInput,
+    app_type: str,
+    past_case_insights: list[str],
+    web_results: list[str],
+    queries: list[str],
+    config: AppConfig,
+) -> SolutionContext:
+    """LLM で過去実績と Web 検索結果を統合し SolutionContext を生成する。"""
+    client = OpenAIChatClient(config)
+    past_insights_text = "\n".join(f"- {i}" for i in past_case_insights) or "なし"
+    web_results_text = "\n---\n".join(web_results) or "なし"
+
+    response = client.generate_json(
+        purpose="research",
+        system_prompt=(
+            "あなたはプリセールス提案のための技術調査アシスタントです。"
+            "\n過去実績と最新の Web 検索結果を統合し、提案ソリューションの技術的根拠を作成してください。"
+
+            "\n\n## 原則"
+            "\n- 技術選定の優先順位は「適合性 > 実現性 > 最新性」とすること"
+            "\n- 過去実績からは「業務課題への適合性」「PoC の進め方」「成果指標」を継承すること"
+            "\n- Web 検索からは「現在推奨される構成」「古い技術の代替候補」を取り入れること"
+            "\n- 過去実績の技術が古い場合、最新の代替技術を提示しつつ移行リスクも述べること"
+            "\n- 確実でない情報は「一般的に〜」「〜の傾向がある」と明示すること"
+
+            "\n\n## 各キーの制約"
+            "\n- recommended_architecture: 推奨するシステム構成を2〜4文で記述"
+            "\n- tech_stack_rationale: なぜその技術選定が妥当かの根拠を3〜5文で記述"
+            "\n- past_case_insights: 過去実績から提案に活かせる知見を3件以内で記述"
+            "\n- web_search_insights: Web 検索から得た最新技術の示唆を3件以内で記述"
+            "\n- technology_risks: 技術的リスクや注意点を2件以内で記述"
+
+            "\n\n## 出力"
+            "\n指定されたスキーマに厳密に従った JSON を返すこと"
+            "\nすべての文字列は日本語で記述すること"
+        ),
+        user_prompt=(
+            "以下の情報をもとに、提案ソリューションの技術的根拠を作成してください。"
+            f"\n\n# 顧客情報"
+            f"\n- client_name: {structured_input.client_name}"
+            f"\n- project_title: {structured_input.project_title}"
+            f"\n- goal_summary: {structured_input.goal_summary}"
+            f"\n- app_type: {app_type}"
+            f"\n- challenge_points: {json.dumps(structured_input.challenge_points, ensure_ascii=False)}"
+            f"\n- requested_capabilities: {json.dumps(structured_input.requested_capabilities, ensure_ascii=False)}"
+            f"\n- constraints: {json.dumps(structured_input.constraints, ensure_ascii=False)}"
+            f"\n\n# 過去実績の知見"
+            f"\n{past_insights_text}"
+            f"\n\n# Web 検索結果"
+            f"\n{web_results_text}"
+        ),
+        response_format=_SOLUTION_CONTEXT_RESPONSE_FORMAT,
+    )
+    payload = _parse_json_response(response.content)
+    return SolutionContext(
+        recommended_architecture=str(
+            payload.get("recommended_architecture") or ""
+        ),
+        tech_stack_rationale=str(
+            payload.get("tech_stack_rationale") or ""
+        ),
+        past_case_insights=_coerce_str_list(
+            payload.get("past_case_insights")
+        ),
+        web_search_insights=_coerce_str_list(
+            payload.get("web_search_insights")
+        ),
+        technology_risks=_coerce_str_list(
+            payload.get("technology_risks")
+        ),
+        search_queries_used=queries,
+    )
+
+
+def _local_solution_context(
+    past_case_insights: list[str],
+    queries: list[str],
+) -> SolutionContext:
+    """API 未使用時のローカルフォールバック。"""
+    return SolutionContext(
+        recommended_architecture="過去の類似案件をベースに、PoC 標準構成を適用する",
+        tech_stack_rationale="過去実績の技術選定を踏襲しつつ、PoC 規模に適した構成を推奨する",
+        past_case_insights=past_case_insights,
+        web_search_insights=[],
+        technology_risks=["Web 検索が実行されていないため、技術の最新性は未検証"],
+        search_queries_used=queries,
+    )
 
 
 _AUGMENT_RESPONSE_FORMAT: dict = {
@@ -802,6 +1068,7 @@ def _build_narrative_with_meta(
     app_type: DemoAppType,
     estimate: EstimateSummary,
     config: AppConfig,
+    solution_context: SolutionContext | None = None,
 ) -> tuple[dict[str, object], str | None]:
     local_narrative = {
         "summary_text": (
@@ -839,6 +1106,46 @@ def _build_narrative_with_meta(
             ],
             ensure_ascii=False,
         )
+        extracted_facts_json = json.dumps(
+            structured_input.extracted_facts, ensure_ascii=False,
+        ) if structured_input.extracted_facts else "なし"
+
+        matched_cases_detail: list[dict[str, str]] = []
+        for c in matched_cases_for_prompt:
+            entry: dict[str, str] = {"summary": c.get("summary", "")}
+            if c.get("detail"):
+                entry["detail"] = c["detail"]
+            if c.get("outcome"):
+                entry["outcome"] = c["outcome"]
+            if c.get("tech_keywords"):
+                entry["tech_keywords"] = ", ".join(c["tech_keywords"])
+            matched_cases_detail.append(entry)
+        matched_cases_json = (
+            json.dumps(matched_cases_detail, ensure_ascii=False)
+            if matched_cases_detail else "なし"
+        )
+
+        solution_context_block = ""
+        if solution_context:
+            sc_parts = [
+                f"\n\n# ソリューション検討コンテキスト",
+                f"\n- recommended_architecture: {solution_context.recommended_architecture}",
+                f"\n- tech_stack_rationale: {solution_context.tech_stack_rationale}",
+            ]
+            if solution_context.web_search_insights:
+                sc_parts.append(
+                    f"\n- web_search_insights: {json.dumps(solution_context.web_search_insights, ensure_ascii=False)}"
+                )
+            if solution_context.past_case_insights:
+                sc_parts.append(
+                    f"\n- past_case_insights: {json.dumps(solution_context.past_case_insights, ensure_ascii=False)}"
+                )
+            if solution_context.technology_risks:
+                sc_parts.append(
+                    f"\n- technology_risks: {json.dumps(solution_context.technology_risks, ensure_ascii=False)}"
+                )
+            solution_context_block = "".join(sc_parts)
+
         response = client.generate_json(
             purpose="generate",
             system_prompt=(
@@ -848,6 +1155,8 @@ def _build_narrative_with_meta(
                 "\n- 未確定事項（Ask 項目）は確定表現で書かないこと"
                 "\n- Assume で仮定した前提は「〜を前提として」「〜と仮定し」と明示すること"
                 "\n- 次回確認事項（ask_blockers）と矛盾する内容を提案文に含めないこと"
+                "\n- 過去実績の業務知見を活かしつつ、最新技術で実装する方針を示すこと"
+                "\n- ソリューション検討コンテキストが提供されている場合、推奨アーキテクチャと技術選定根拠を提案に反映すること"
                 "\n\n## 各キーの制約"
                 "\n- summary_text: 提案の要約を1〜2文で記述"
                 "\n- solution_summary: 提案内容を Markdown で構造化（各見出しは行頭の `# ` のみ）"
@@ -871,9 +1180,11 @@ def _build_narrative_with_meta(
                 f"\n- constraints: {constraints_json}"
                 f"\n- ask_blockers: {ask_blockers_json}"
                 f"\n- confirmation_items: {confirmation_items_json}"
+                f"\n- extracted_facts: {extracted_facts_json}"
                 f"\n- app_type: {app_type}"
-                f"\n- matched_cases: {json.dumps([c['summary'] for c in matched_cases_for_prompt], ensure_ascii=False) if matched_cases_for_prompt else 'なし'}"
+                f"\n- matched_cases: {matched_cases_json}"
                 f"\n- estimate_total_jpy: {estimate.total_jpy}"
+                f"{solution_context_block}"
             ),
             response_format=_NARRATIVE_RESPONSE_FORMAT,
         )

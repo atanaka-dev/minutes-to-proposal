@@ -122,6 +122,18 @@ class DemoAppArtifact:
 
 
 @dataclass
+class SolutionContext:
+    """ソリューション検討コンテキスト（過去実績 + Web検索の統合結果）。"""
+
+    recommended_architecture: str
+    tech_stack_rationale: str
+    past_case_insights: list[str] = field(default_factory=list)
+    web_search_insights: list[str] = field(default_factory=list)
+    technology_risks: list[str] = field(default_factory=list)
+    search_queries_used: list[str] = field(default_factory=list)
+
+
+@dataclass
 class ProposalPackage:
     """提案一式の成果物。"""
 

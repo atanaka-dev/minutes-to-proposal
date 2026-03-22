@@ -45,29 +45,33 @@ from src.tools.presales import (
     generate_demo_app_tool,
     lookup_knowledge_assets_tool,
     research_context_tool,
+    research_solution_context_tool,
 )
 
-_STEP_LABELS = ["Input解析", "Knowledge参照", "提案生成", "デモ生成"]
+_STEP_LABELS = ["Input解析", "Knowledge参照", "ソリューション検討", "提案生成", "デモ生成"]
 
 _TOOL_START_STEP: dict[str, int] = {
     "extract_presales_input": 0,
     "lookup_knowledge_assets": 1,
-    "build_proposal_package": 2,
-    "critique_proposal_package": 2,
-    "generate_demo_app": 3,
+    "research_solution_context": 2,
+    "build_proposal_package": 3,
+    "critique_proposal_package": 3,
+    "generate_demo_app": 4,
 }
 
 _TOOL_DONE_STEPS: dict[str, list[int]] = {
     "extract_presales_input": [0],
     "lookup_knowledge_assets": [1],
+    "research_solution_context": [2],
     "build_proposal_package": [],
-    "critique_proposal_package": [2],
-    "generate_demo_app": [3],
+    "critique_proposal_package": [3],
+    "generate_demo_app": [4],
 }
 
 _ALL_TOOLS = [
     extract_presales_input_tool,
     lookup_knowledge_assets_tool,
+    research_solution_context_tool,
     build_proposal_package_tool,
     critique_proposal_package_tool,
     generate_demo_app_tool,
@@ -373,12 +377,14 @@ def _update_step_summaries(update: AgentUpdate, summaries: dict[int, str]) -> No
         summaries[1] = "テンプレート・単価表・過去案件を参照"
     elif tool == "build_proposal_package" and update.proposal_package:
         pkg = update.proposal_package
-        summaries[2] = f"HTML・WBS({len(pkg.wbs)}件)・概算 ¥{pkg.estimate.total_jpy:,}"
+        summaries[3] = f"HTML・WBS({len(pkg.wbs)}件)・概算 ¥{pkg.estimate.total_jpy:,}"
     elif tool == "critique_proposal_package":
-        prev = summaries.get(2, "")
-        summaries[2] = f"{prev} → 品質チェック完了" if prev else "品質チェック完了"
+        prev = summaries.get(3, "")
+        summaries[3] = f"{prev} → 品質チェック完了" if prev else "品質チェック完了"
     elif tool == "generate_demo_app" and update.demo_app:
-        summaries[3] = f"{update.demo_app.app_type} 型デモを生成"
+        summaries[4] = f"{update.demo_app.app_type} 型デモを生成"
+    elif tool == "research_solution_context":
+        summaries[2] = update.summary[:80] if update.summary else "Web検索 + 過去実績を統合"
     elif tool == "research_context":
         prev = summaries.get(0, "")
         summaries[0] = f"{prev} → 補足調査" if prev else "補足調査"
@@ -1344,6 +1350,94 @@ def _preview_faq_search(
 
 
 # ------------------------------------------------------------------
+# Live / Finished Log
+# ------------------------------------------------------------------
+
+_TOOL_LABELS: dict[str, str] = {
+    "extract_presales_input": "Input 解析",
+    "lookup_knowledge_assets": "Knowledge 参照",
+    "research_solution_context": "ソリューション検討",
+    "build_proposal_package": "提案パッケージ生成",
+    "critique_proposal_package": "品質チェック",
+    "generate_demo_app": "デモアプリ生成",
+    "research_context": "補足調査（Planner）",
+    "augment_assumptions": "仮定補完（Planner）",
+}
+
+
+def _render_progress_log(entries: list[dict[str, object]]) -> None:
+    """進行過程ログを表示する（ライブ実行中・完了後・アーカイブ共通）。"""
+    if not entries:
+        st.caption("進行過程の記録がありません。")
+        return
+    for entry in entries:
+        tool = str(entry.get("tool", ""))
+        phase = str(entry.get("phase", ""))
+        summary = str(entry.get("summary", ""))
+        duration = entry.get("duration")
+        elapsed = entry.get("elapsed")
+        label = _TOOL_LABELS.get(tool, tool)
+        if phase == "start":
+            elapsed_str = f" ({elapsed:.1f}s)" if isinstance(elapsed, (int, float)) else ""
+            st.markdown(f"▶ **{label}** 開始…{elapsed_str}")
+        else:
+            time_val = duration if isinstance(duration, (int, float)) else elapsed
+            time_str = f" — {time_val:.1f}s" if isinstance(time_val, (int, float)) else ""
+            st.markdown(f"✅ **{label}** 完了{time_str}")
+            if summary:
+                st.caption(f"　└ {summary}")
+
+
+def _safe_parse_ts(ts_str: str | None) -> datetime | None:
+    if not ts_str:
+        return None
+    try:
+        return datetime.fromisoformat(ts_str)
+    except (ValueError, TypeError):
+        return None
+
+
+def _build_progress_entries_from_trace(trace: TraceLog) -> list[dict[str, object]]:
+    """TraceLog の action/observation イベントから進行過程エントリを復元する。"""
+    entries: list[dict[str, object]] = []
+    first_ts: datetime | None = None
+    tool_start_ts: dict[str, datetime] = {}
+
+    for event in trace.events:
+        if event.type not in ("action", "observation"):
+            continue
+        if not event.tool_name:
+            continue
+        ts = _safe_parse_ts(event.ts)
+        if ts is None:
+            continue
+        if first_ts is None:
+            first_ts = ts
+        elapsed = (ts - first_ts).total_seconds()
+
+        if event.type == "action":
+            tool_start_ts[event.tool_name] = ts
+            entries.append({
+                "tool": event.tool_name,
+                "phase": "start",
+                "summary": "",
+                "elapsed": elapsed,
+            })
+        elif event.type == "observation":
+            start = tool_start_ts.pop(event.tool_name, None)
+            duration = (ts - start).total_seconds() if start else None
+            entries.append({
+                "tool": event.tool_name,
+                "phase": "done",
+                "summary": event.tool_result_summary or "",
+                "elapsed": elapsed,
+                "duration": duration,
+            })
+
+    return entries
+
+
+# ------------------------------------------------------------------
 # Live Execution UI
 # ------------------------------------------------------------------
 
@@ -1359,13 +1453,14 @@ def _execute_with_live_ui(user_input: str) -> None:
     header_ph.info("エージェント実行中…")
 
     st.divider()
-    tab_ask, tab_proposal, tab_estimate, tab_demo = st.tabs(
-        ["前提と未確定", "提案HTML", "見積 / WBS", "デモアプリ"],
+    tab_ask, tab_proposal, tab_estimate, tab_demo, tab_log = st.tabs(
+        ["前提と未確定", "提案HTML", "見積 / WBS", "デモアプリ", "Log"],
     )
     ask_ph = tab_ask.empty()
     proposal_ph = tab_proposal.empty()
     estimate_ph = tab_estimate.empty()
     demo_ph = tab_demo.empty()
+    log_ph = tab_log.empty()
 
     n_steps = len(_STEP_LABELS)
     step_states: dict[int, str] = {i: "pending" for i in range(n_steps)}
@@ -1377,11 +1472,19 @@ def _execute_with_live_ui(user_input: str) -> None:
         _render_vertical_progress(step_states, step_durations, step_summaries)
 
     _live_render_counter = {"n": 0}
+    _live_log_entries: list[dict[str, object]] = []
 
     def on_update(update: AgentUpdate) -> None:
         _live_render_counter["n"] += 1
         now = time_mod.monotonic()
         tool = update.tool_name
+
+        _live_log_entries.append({
+            "tool": tool,
+            "phase": update.phase,
+            "summary": update.summary,
+            "elapsed": update.elapsed_sec,
+        })
 
         if update.phase == "start":
             target = _TOOL_START_STEP.get(tool)
@@ -1413,6 +1516,8 @@ def _execute_with_live_ui(user_input: str) -> None:
                 with demo_ph.container():
                     _render_demo_content(update.demo_app, update.proposal_package)
 
+        with log_ph.container():
+            _render_progress_log(_live_log_entries)
         with progress_ph.container():
             _render_vertical_progress(step_states, step_durations, step_summaries)
 
@@ -1510,6 +1615,9 @@ def _render_agent_result_view(
             st.caption("データなし")
 
     with tab_log:
+        progress_entries = _build_progress_entries_from_trace(result.trace)
+        _render_progress_log(progress_entries)
+        st.divider()
         _render_planner_trace(result)
         with st.expander("Trace（JSON）", expanded=False):
             with st.container(height=480):
@@ -1520,6 +1628,7 @@ def _render_agent_result_view(
 _STAGE_LABELS: dict[str, str] = {
     "extract_presales_input": "Input 解析",
     "lookup_knowledge_assets": "Knowledge 参照",
+    "research_solution_context": "ソリューション検討",
     "critique_proposal_package": "品質チェック",
 }
 
@@ -1720,15 +1829,17 @@ def _render_archive_view(run: dict) -> None:
     with tab_log:
         if trace_path.exists():
             trace_log = _trace_log_from_jsonl(trace_path)
-            _render_planner_trace(
-                AgentResult(
-                    output="",
-                    trace=trace_log,
-                    success=True,
-                    run_id=str(run.get("run_id", "")),
-                    run_dir=str(run_dir),
-                ),
+            archive_result = AgentResult(
+                output="",
+                trace=trace_log,
+                success=True,
+                run_id=str(run.get("run_id", "")),
+                run_dir=str(run_dir),
             )
+            progress_entries = _build_progress_entries_from_trace(trace_log)
+            _render_progress_log(progress_entries)
+            st.divider()
+            _render_planner_trace(archive_result)
             with st.expander("Trace（JSON）", expanded=False):
                 with st.container(height=480):
                     for event in trace_log.events:
